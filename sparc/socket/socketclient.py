@@ -1,4 +1,5 @@
 import socket
+import json
 
 echo_sig = "ECHO "
 calc_sig = "ASE CALC "
@@ -55,6 +56,8 @@ class SocketClient:
         self._send_message(echo_sig + message + eor_sig)
         self._recv_message()
 
-    def send_calc_request(self, message:str="test"):
-        self._send_message(calc_sig + message + eor_sig)
+    def send_calc_request(self, grid_spacing, atom, cubic):
+        # ["ASE CALC", 0.2, "Si", True]
+        params = [calc_sig, grid_spacing, atom, cubic]
+        self._send_message(json.dumps(params).encode())
         self._recv_message()
