@@ -1,3 +1,6 @@
+# Usage
+At the top level of the sparc-dft-api project, run `make` to compile server
+code. `make clean` will previously compiled code.
 # Socket Description
 
 
