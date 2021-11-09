@@ -28,13 +28,16 @@ static struct option gLongOptions[] = {
   {NULL,            0,                      NULL,             0}
 };
 
+const char eor_sig[] = "\r\n\r\n";
 
 int main(int argc, char **argv) {
   int option_char;
-  int portno = 20801; /* port to listen on */
-  int max_queue = 1;
+  int portno = 20801;    // port to listen on
+  int max_queue = 1;     // max number of connections to server
+  int s;                // socket fd that will eventually be filled
   server_t *serv;
-  
+  connectinfo_t **cnx;
+    
   // Parse and set command line arguments
   while ((option_char = getopt_long(argc, argv, "p:m:hx", gLongOptions, NULL)) != -1) {
    switch (option_char) {
@@ -71,14 +74,11 @@ int main(int argc, char **argv) {
   server_set_port(&serv, portno);
   server_set_maxqueue(&serv, max_queue);
 
-  server_serve(&serv);
+  cnx = server_connect(&serv, &s);
+  server_process(cnx); //processes in potentially inf loop
 
+  return server_abort(cnx, serv, s);
 }
-
-// Will need to expand this more in the future for more codes
-const char echo_sig[] = "ECHO ";
-const char calc_sig[] = "ASE CALC ";
-const char eor_sig[] = "\r\n\r\n";
 
 server_t* server_create(){
     server_t *serv = calloc(1, sizeof(server_t));
@@ -95,6 +95,78 @@ void server_set_port(server_t **serv, unsigned short port){
 
 void server_set_maxqueue(server_t **serv, int max_queue){
     (*serv)->max_queue = max_queue;
+}
+
+connectinfo_t **server_connect(server_t **serv, int *s){
+
+    /* Bind the server to a socket */
+    serv_int_bind_socket(serv, s);
+
+    /* Accept a connection from client */
+    int sockfd = serv_int_listen_accept(serv, s);
+    if (sockfd == -1){
+        printf("Failed to accept");
+    }
+
+    /* Create a connection info struct for the session */    
+    connectinfo_t *cnxinfo_struct = calloc(1, sizeof(connectinfo_t)); 
+    connectinfo_t **cnxinfo = &cnxinfo_struct;
+    (*cnxinfo)->cnx_status = OK; //default ok
+    (*cnxinfo)->sockfd = sockfd;
+
+    // printf("%d\n", (*cnxinfo)->sockfd);
+
+    return cnxinfo;
+    
+}
+
+void server_process(connectinfo_t **cnxinfo){
+
+    sleep(2);
+    printf("%p\n", cnxinfo);
+    printf("hi\n");
+    printf("%p\n", *cnxinfo);
+    printf("%d\n", (*cnxinfo)->cnx_status);
+    printf("%d\n", (*cnxinfo)->sockfd);
+    sleep(2);
+
+    char req_buf[MAX_REQUEST_LEN];
+    int rv = 0;
+    
+    /* For each interaction - continues until abort call or error*/
+    while (rv == 0){
+
+        memset(&req_buf, '\0', MAX_REQUEST_LEN);
+        serv_int_recv(cnxinfo, req_buf);
+
+        /* Parse the request, decide status */
+                // printf("%.128s\n", req_buf);
+        serv_int_parse_request(cnxinfo, req_buf);
+        printf("Request Parsed.\n");
+        if ((*cnxinfo)->cnx_status == INVALID){
+            printf("Invalid Request\n");
+            continue;
+        }
+
+        /* Process request cases*/
+        int rv = serv_int_dispatch(cnxinfo);
+        printf("Function return: %d\n", rv);
+
+        // if (*cnxinfo != NULL){
+        //     printf("Closed client socket.\n");
+        //     close((*cnxinfo)->sockfd);
+        //     free(*cnxinfo);
+        //     *cnxinfo = NULL;
+        // }
+    }
+}
+
+int server_abort(connectinfo_t **cnx, server_t *serv, int s){
+    close(s);
+    free(cnx);
+    free(serv);
+
+    return 0;
 }
 
 ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t len){
@@ -116,6 +188,40 @@ ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t len){
     }
     printf("Bytes sent: %d \n", total);
     return total;
+}
+
+ssize_t serv_int_recv(connectinfo_t **cnxinfo, char *req_buf){ //maybe needs to be req_buf[]
+    
+    // int bytes_recvd = 0; // # of bytes_received this msg
+    int total_num = 0; // counter for req_buf 
+    // char tmp_buf[MAX_REQUEST_LEN];
+
+    /* Recieve the request into tmp_buf, then copying the recieved bytes to the
+    * current offset in recv_buf */
+    // while (total_num < MAX_REQUEST_LEN){
+    //     bytes_recvd = recv((*cnxinfo)->sockfd, &tmp_buf[0], MAX_REQUEST_LEN, 0);
+    //     printf("bytes received: \"%.*s\"\n", bytes_recvd, tmp_buf);
+            
+    //     if (bytes_recvd <= 0){ // 0 bytes recieved = closed connection; <0 bytes = error
+    //         printf("%d bytes received. \n", bytes_recvd);
+    //         printf("Client has closed their connection or there was an error. \n\n");
+    //         (*cnxinfo)->cnx_status = INVALID; //INVALID
+    //         break;
+    //     } 
+    //     memcpy(&(req_buf[total_num]), &tmp_buf, bytes_recvd); 
+    //     total_num += bytes_recvd;
+    //     if (total_num > MAX_REQUEST_LEN) {
+    //         fprintf(stderr, "Request is too long: %d bytes \n", total_num);
+    //         (*cnxinfo)->cnx_status = INVALID; //INVALID
+    //         exit(1);
+    //     }
+    //     /* Locate a substring with the end-of-response message - if NULL, then the client hasn't
+    //         * finished sending the message */
+    //     if ((memmem(&req_buf, MAX_REQUEST_LEN, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
+    //         break; //success
+    //     }
+    // }
+    return total_num;
 }
 
 void serv_int_bind_socket(server_t **serv, int *s){
@@ -167,212 +273,84 @@ int serv_int_listen_accept(server_t **serv, int *s){
     return sockfd;
 }
 
-char *serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]){
-    char *substr, *request=NULL;
-    const char *used_sig;
+void serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]){
+    char *substr;
 
-    /* Check for "ASE CALC " as first characters */
-    if (strncmp(calc_sig, req_buf, strlen(calc_sig)) == 0) {  
-      (*cnxinfo)->request_type = 1;
-      used_sig = calc_sig;
-    } 
-    /* Check for "ECHO " as first characters */
-    else if (strncmp(echo_sig, req_buf, strlen(echo_sig)) == 0){
-      (*cnxinfo)->request_type = 2;
-      used_sig = echo_sig;
-    } 
-    else {
-      (*cnxinfo)->request_type = -1;
-      (*cnxinfo)->STATUS = INVALID;
-      fprintf(stderr, "No request string found.\n");
-      return request;
-    }
-
-    /* Make sure it's a complete request by checking end characters*/
+    /* Make sure it's a complete request by checking end characters */
     if ((substr = strstr(req_buf, eor_sig)) == NULL) { 
-        (*cnxinfo)->STATUS = INVALID;
+        (*cnxinfo)->cnx_status = INVALID;
         printf("%.128s\n", req_buf);
         fprintf(stderr, "End of request characters not found.\n");
-    }
-    else {
-        int req_len = ((int) (substr - req_buf)) - (strlen(used_sig)) + 1; // might need to subtract 1
-        (*cnxinfo)->request_len = req_len;
-        request = calloc(1, req_len+1);
-        
-        strncpy(request, &(req_buf[strlen(used_sig)]), req_len); // might need to shift by 1
+        exit(1);
     }
 
-    return request;
+    /* Serves as a router for request handling - check if these are first characters*/
+    if (strncmp("STATUS", req_buf, strlen("STATUS")) == 0) {  // might need to subtract 1 from len
+      (*cnxinfo)->request_type = STATUS;
+    } else if (strncmp("INIT", req_buf, strlen("INIT")) == 0){
+      (*cnxinfo)->request_type = INIT;
+    } else if (strncmp("POSDATA", req_buf, strlen("POSDATA")) == 0){
+      (*cnxinfo)->request_type = POSDATA;
+    } else if (strncmp("GETFORCE", req_buf, strlen("GETFORCE")) == 0){
+      (*cnxinfo)->request_type = GETFORCE;
+    } else if (strncmp("ABORT", req_buf, strlen("ABORT")) == 0){
+      (*cnxinfo)->request_type = ABORT;
+    } else if (strncmp("ECHO", req_buf, strlen("ECHO")) == 0){
+      (*cnxinfo)->request_type = ECHO;
+    } else {
+      (*cnxinfo)->request_type = -1;
+      (*cnxinfo)->cnx_status = INVALID;
+      fprintf(stderr, "No request string found.\n");
+    }
 }
 
-int protocol_echo(connectinfo_t **cnxinfo, char *request){
-    int bytes_returned;
+int serv_int_dispatch(connectinfo_t **cnxinfo){
+    int rv = -1;
+
+    switch((*cnxinfo)->request_type) {
+
+        case STATUS:
+            rv = protocol_echo(cnxinfo);
+            break;
+            
+        case INIT:
+            rv = protocol_echo(cnxinfo);
+            break;
+        
+        case POSDATA:
+            rv = protocol_echo(cnxinfo);
+            break;
+        
+        case GETFORCE: 
+            rv = protocol_echo(cnxinfo);
+            break;
+        
+        case ABORT:
+            rv = 1; // simply want to shut server down without interactions
+            break;
+
+        case ECHO:
+            rv = protocol_echo(cnxinfo);
+            break;
+
+    }
+    return rv;
+}
+
+int protocol_echo(connectinfo_t **cnxinfo){
+    int bytes_rcvd, bytes_returned;
+    char msg_from_client[MAX_REQUEST_LEN];
+
+    // Recieve Client calls
+    bytes_rcvd = serv_int_recv(cnxinfo, msg_from_client);
+    printf("Bytes sent: %.128i\n", bytes_rcvd);
 
     // Echo recieved data back to client
-    bytes_returned = serv_int_send(cnxinfo, request, (*cnxinfo)->request_len);
+    bytes_returned = serv_int_send(cnxinfo, msg_from_client, (*cnxinfo)->request_len);
     if (bytes_returned == -1){
       printf("Server failed to return message. \n");
       exit(1);
     }
     return 0;
 }
-
-int protocol_calc(connectinfo_t **cnxinfo, char *request) {
-     return protocol_echo(cnxinfo, request);
-}
-
-int protocol_dispatch(connectinfo_t **cnxinfo, char *request){
-    int rv = -1;
-
-    if ((*cnxinfo)->request_type == 1){
-      rv = protocol_calc(cnxinfo, request);
-    } 
-    else if ((*cnxinfo)->request_type == 2){
-      rv = protocol_echo(cnxinfo, request); 
-    }
-    return rv;
-}
-
-void server_serve(server_t **serv){
-    int s, num; // socket, counter for req_buf bytes_received
-    int bytes_recvd = 0;// bytes_sent = 0, ;
-    char req_buf[MAX_REQUEST_LEN], tmp_buf[MAX_REQUEST_LEN];
-
-    /* Bind the server to a socket */
-    serv_int_bind_socket(serv, &s);
-
-    /* Listen for requests */
-    while (1){
-
-        /* Accept a connection from client */
-        int sockfd = serv_int_listen_accept(serv, &s);
-        if (sockfd == -1){
-            printf("Failed to accept");
-        }
-
-        /* Recieve the request into tmp_buf, then copying the recieved bytes to the
-         * current offset in recv_buf */
-        connectinfo_t *cnxinfo_struct = calloc(1, sizeof(connectinfo_t)); 
-        connectinfo_t **cnxinfo = &cnxinfo_struct;
-        (*cnxinfo)->STATUS = OK; //default ok
-        (*cnxinfo)->sockfd = sockfd;
-        num = 0;
-        memset(&req_buf, '\0', MAX_REQUEST_LEN);
-        while (num < MAX_REQUEST_LEN){
-            bytes_recvd = recv((*cnxinfo)->sockfd, &tmp_buf, MAX_REQUEST_LEN, 0);
-            printf("bytes received: \"%.*s\"\n", bytes_recvd, tmp_buf);
-             
-            if (bytes_recvd <= 0){ // 0 bytes recieved = closed connection; <0 bytes = error
-                printf("%d bytes received. \n", bytes_recvd);
-                printf("Client has closed their connection or there was an error. \n\n");
-                (*cnxinfo)->STATUS = INVALID; //INVALID
-                break;
-            } 
-            memcpy(&(req_buf[num]), &tmp_buf, bytes_recvd); 
-            num += bytes_recvd;
-            if (num > MAX_REQUEST_LEN) {
-                fprintf(stderr, "Request is too long: %d bytes \n", num);
-                (*cnxinfo)->STATUS = INVALID; //INVALID
-                exit(1);
-            }
-            /* Locate a substring with the end-of-response message - if NULL, then the client hasn't
-             * finished sending the message */
-            if ((memmem(&req_buf, MAX_REQUEST_LEN, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
-                break; //success
-            }
-        }
-
-        /* Parse the request, decide status */
-        // printf("%.128s\n", req_buf);
-        char *request = serv_int_parse_request(cnxinfo, req_buf);
-        printf("Request Parsed.\n");
-        if ((*cnxinfo)->STATUS == INVALID){
-            printf("Sending Invalid Status 1\n");
-            // serv_int_sendheader(cnxinfo, (*cnxinfo)->STATUS, 0);
-            
-        } else {
-          /* Process request cases*/
-          int rv = protocol_dispatch(cnxinfo, request);
-          printf("Function return: %d\n", rv);
-          if (rv < 0){
-              printf("Sending Error Status 2\n");
-              (*cnxinfo)->STATUS = ERROR;
-              // serv_int_sendheader(cnxinfo, (*cnxinfo)->STATUS, 0);  
-          }
-        }
-        if (request != NULL){
-            printf("Freed request.\n");
-            free(request);
-        }
-        if (*cnxinfo != NULL){
-            printf("Closed client socket.\n");
-            close((*cnxinfo)->sockfd);
-            free(cnxinfo_struct);
-            *cnxinfo = NULL;
-        }
-        continue;
-    }
-    close(s);
-    free(*serv);
-}
-
-// ssize_t serv_int_sendheader(connectinfo_t **cnxinfo, serverstatus_t status, size_t file_len){
-//     printf("File length: %lu\n", file_len);
-//     char hdr[MAX_REQUEST_LEN];
-//     int hdr_len = 0;
-//     char scheme[7] = "SPARC ";
-//     //copy scheme to buffer
-//     memcpy(hdr, scheme, strlen(scheme));
-//     hdr_len += strlen(scheme);
-//     switch (status){
-//         char *stat;
-//         case OK:
-//             //copy "OK " to buffer
-//             stat = "OK ";
-//             memcpy(hdr+hdr_len, stat, strlen(stat));
-//             hdr_len += strlen(stat);      
-//             //copy file_len - sprintf
-//             char fl[35];
-//             memset(fl, '\0', 35);
-//             sprintf(fl, "%lu",  file_len);
-//             memcpy(hdr+hdr_len, fl, strlen(fl));
-//             hdr_len += strlen(fl);
-//             break;
-//         case ERROR:
-//             //copy "ERROR" to buffer
-//             stat = "ERROR";
-//             memcpy(hdr+hdr_len, stat, strlen(stat));
-//             hdr_len += strlen(stat); 
-//             break;  
-//         case INVALID:
-//             //copy "INVALID" to buffer
-//             stat = "INVALID";
-//             memcpy(hdr+hdr_len, stat, strlen(stat));
-//             hdr_len += strlen(stat); 
-//             break;
-//         default:
-//             fprintf(stderr, "Incorrect error code.");
-//             exit(1);
-//     }
-//     //copy "\r\n\r\n" to buffer
-//     memcpy(hdr+hdr_len, eor_sig, strlen(eor_sig));
-//     hdr_len += strlen(eor_sig);
-//     int bytes_sent = send((*cnxinfo)->sockfd, hdr, hdr_len, 0);
-//     if (bytes_sent == -1){
-//         fprintf(stderr, "Server failed to header. \n");
-//         return -1;
-//     } else {
-//         // printf("%d\n", bytes_sent);
-//         printf("%.*s", bytes_sent, hdr);
-//     } 
-//     return bytes_sent;
-// }
-
-// void server_set_handlerarg(server_t **serv, void* arg){
-//     (*serv)->harg = arg;
-// }
-
-// void server_set_handler(server_t **serv, handler_error_t (*handler)(connectinfo_t **, const char *, void*)){
-//     (*serv)->handler = handler;
-// }
 

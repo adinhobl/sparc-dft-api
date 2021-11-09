@@ -18,7 +18,7 @@
  * would solely by the amount that a single recv could get, and
  * not the full message length
  */
-#define MAX_REQUEST_LEN 8192 
+#define MAX_REQUEST_LEN 128 
 
 /*
  * Defines status codes for common statuses and errors in server
@@ -29,6 +29,15 @@ typedef int serverstatus_t;
 #define  OK 200
 #define  ERROR 500
 #define  INVALID 600
+
+
+/* Used in routing appropriate interaction functions */
+#define ABORT -1
+#define STATUS 1 
+#define INIT 2
+#define POSDATA 3
+#define GETFORCE 4
+#define ECHO 99
 
 /*
  * Struct that is passed throughout the code with common
@@ -46,7 +55,7 @@ typedef int serverstatus_t;
  */
 typedef struct connectinfo_t{
     int sockfd;
-    serverstatus_t STATUS;
+    serverstatus_t cnx_status;
     int request_type;
     int request_len;
 } connectinfo_t;
@@ -67,6 +76,10 @@ typedef struct server_t {
     struct addrinfo hints;
 
 } server_t;
+
+/*****                                       *****
+ *****             Server setup              *****
+ *****                                       *****/ 
 
 /* 
  * Creates a server by populating the server struct. Connections
@@ -103,23 +116,43 @@ void server_set_port(server_t **serv, unsigned short port);
 void server_set_maxqueue(server_t **serv, int max_queue);
 
 /*
- * Begins the server loop. Roughly, this corresponds to:
- *  binding the server to a socket
- *  And then, in a loop:
- *      listening and accepting a client connection
- *      receiving the client's initial request message
- *      parsing the request to find what handling functions to call
- *      dispatching the message payload to the appropraite function
- *      freeing various variable and closing the connection to the client
- * 
- * This loop does not (yet terminate) but hoopefully will
- * in the future with client calls.
- *
+ * Binds the server to a socket. Then listens for and accepts a client 
+ * connection. Creates a connectinfo struct to pass to different
+ * functions so they can communicate with the client.
+ *  
  * Arguments:
  *  serv: pointer to server_t object from server_create() where the 
  *          port information will be populated.
+ *  s: file descriptor for the socket communications
  */
-void server_serve(server_t **serv);
+connectinfo_t **server_connect(server_t **serv, int *s);
+
+/*
+ * Begins the server loop to process client queries. Roughly, this
+ * corresponds to:
+ *   receiving the client's initial request message
+ *   parsing the request to find what handling functions to call
+ *   dispatching the message payload to the appropriate function
+ * 
+ * This loop does not (yet terminate) but hoopefully will
+ * in the future with client calls.
+ */ 
+void server_process(connectinfo_t ** cnxinfo);
+
+/* 
+ * Cleans up current session by closing sockets, freeing ports, freeing
+ * connection context, and shuts down the server. 
+ * 
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so this
+ *          function can send its data.
+ *  serv: pointer to server_t object from server_create() where the 
+ *          port information will be populated.
+ *  s: file descriptor for the socket communications
+ * 
+ * Returns: status code (right now, just 0)
+ */
+int server_abort(connectinfo_t **cnx, server_t *serv, int s);
 
 
 /*****                                       *****
@@ -127,7 +160,7 @@ void server_serve(server_t **serv);
  *****                                       *****/ 
 
 /*
- * Sends a message at data of length size to the client based
+ * Sends a buffer of data of length size to the client based
  * on connection info from cnxinfo. Is superior to a regular 
  * send call because it will handle incomplete sends of single
  * messages and ensure that the full message is sent.
@@ -141,6 +174,25 @@ void server_serve(server_t **serv);
  *          in bytes
  */
 ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t size);
+
+/*
+ * Recieves a buffer of data of unknown size (max size MAX_REQUEST_LEN)
+ * from the client based on connection info from cnxinfo. Is superior
+ * to a regular send call because it will handle incomplete recvs of single
+ * messages and ensure that the full message is sent. To do this, it scans
+ * for the End-Of-Response sentinel characters, eor_sig. req_buf will be 
+ * cleared at the beginning of this function.
+ * 
+ * NOTE: for messages longer than MAX_REQUEST_LEN, you will want to allocate
+ *       memory instead of using this.
+ * 
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so this
+ *          function can send its data. 
+ *  req_buf: a buffer of max size MAX_REQUEST_LEN that is used to hold
+ *          the short messages for this protocol
+ */
+ssize_t serv_int_recv(connectinfo_t **cnxinfo, char req_buf[]);
 
 /*
  * Binds the server with parameters specified by serv to 
@@ -168,9 +220,12 @@ int serv_int_listen_accept(server_t **serv, int *s);
  * payload to.
  * Check the first characters to determine what type of request it is. 
  * Currently defined message headers are:
- *      1 - "ASE CALC " 
- *      2 - "ECHO "
- * Returns allocated memory for later usage by the handling functions.
+ *      1 - "STATUS" 
+ *      2 - "INIT"
+ *      3 - "POSDATA"
+ *      4 - "GETFORCE"
+ *      5 - "ABORT"
+ *     99 - "ECHO"
  * 
  * Arguments:
  *  cnxinfo: information about the client-server connection so this
@@ -178,14 +233,17 @@ int serv_int_listen_accept(server_t **serv, int *s);
  *  req_buf: the message from the client including the header that
  *          specifies which handling function to route to
  */
-char *serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]);
+void serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]);
 
 /*
- * UNUSED
+ * Dispatches client messages to the appropriate handler function 
+ * based on the parsed starting sequence.  
  * 
- * Sends the client a header message about the status of its request.
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so the 
+ *          handling functions can send its data.
  */
-// ssize_t serv_int_sendheader(connectinfo_t **cnxinfo, serverstatus_t status, size_t file_len);
+int serv_int_dispatch(connectinfo_t **cnxinfo);
 
 
 /*****                                       *****
@@ -200,53 +258,4 @@ char *serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]);
  *          function can send its data.
  *  request: data that will be sent directly back to the client
  */
-int protocol_echo(connectinfo_t **cnxinfo, char *request);
-
-/*
- * Calls the SPARC calculating function on the request data. 
- * 
- * Arguments:
- *  cnxinfo: information about the client-server connection so this
- *          function can send its data.
- *  request: data that will be sent to the SPARC calculating function
- */
-int protocol_calc(connectinfo_t **cnxinfo, char *request);
-
-/*
- * Dispatches client messages to the appropriate handler function 
- * based on the parsed starting sequence.  
- * 
- * Arguments:
- *  cnxinfo: information about the client-server connection so the 
- *          handling functions can send its data.
- *  request: the data that will be routed to the handling functions
- */
-int protocol_dispatch(connectinfo_t **cnxinfo, char *request);
-
-/*
- * UNUSED
- * 
- * Handler function to abort the current session and shut down the server. 
- * 
- * Arguments:
- *  cnxinfo: information about the client-server connection so this
- *          function can send its data.
- */
-void protocol_abort(connectinfo_t **cnxinfo);
-
-
-/*****                                       *****
- ***** Old code or code for future adaptions *****
- *****                                       *****/                                      
-
-// typedef size_t handler_error_t;
-
-// void server_set_handler(server_t **serv, handler_error_t (*handler)(connectinfo_t **, const char *, void*));
-
-// void server_set_handlerarg(server_t **serv, void* arg);
-
-// handler_error_t serv_int_handler(connectinfo_t **cnxinfo, const char *path, void* arg);
-
-// handler_error_t (*handler)(); // would go in server struct
-// void *harg; // would go in server struct
-
+int protocol_echo(connectinfo_t **cnxinfo);
