@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
   int max_queue = 1;     // max number of connections to server
   int s;                // socket fd that will eventually be filled
   server_t *serv;
-  connectinfo_t **cnx;
+  connectinfo_t *cnx;
     
   // Parse and set command line arguments
   while ((option_char = getopt_long(argc, argv, "p:m:hx", gLongOptions, NULL)) != -1) {
@@ -97,7 +97,7 @@ void server_set_maxqueue(server_t **serv, int max_queue){
     (*serv)->max_queue = max_queue;
 }
 
-connectinfo_t **server_connect(server_t **serv, int *s){
+connectinfo_t *server_connect(server_t **serv, int *s){
 
     /* Bind the server to a socket */
     serv_int_bind_socket(serv, s);
@@ -109,27 +109,14 @@ connectinfo_t **server_connect(server_t **serv, int *s){
     }
 
     /* Create a connection info struct for the session */    
-    connectinfo_t *cnxinfo_struct = calloc(1, sizeof(connectinfo_t)); 
-    connectinfo_t **cnxinfo = &cnxinfo_struct;
-    (*cnxinfo)->cnx_status = OK; //default ok
-    (*cnxinfo)->sockfd = sockfd;
-
-    // printf("%d\n", (*cnxinfo)->sockfd);
+    connectinfo_t *cnxinfo = calloc(1, sizeof(connectinfo_t)); 
+    cnxinfo->cnx_status = OK; //default ok
+    cnxinfo->sockfd = sockfd;
 
     return cnxinfo;
-    
 }
 
-void server_process(connectinfo_t **cnxinfo){
-
-    sleep(2);
-    printf("%p\n", cnxinfo);
-    printf("hi\n");
-    printf("%p\n", *cnxinfo);
-    printf("%d\n", (*cnxinfo)->cnx_status);
-    printf("%d\n", (*cnxinfo)->sockfd);
-    sleep(2);
-
+void server_process(connectinfo_t *cnxinfo){
     char req_buf[MAX_REQUEST_LEN];
     int rv = 0;
     
@@ -143,7 +130,7 @@ void server_process(connectinfo_t **cnxinfo){
                 // printf("%.128s\n", req_buf);
         serv_int_parse_request(cnxinfo, req_buf);
         printf("Request Parsed.\n");
-        if ((*cnxinfo)->cnx_status == INVALID){
+        if (cnxinfo->cnx_status == INVALID){
             printf("Invalid Request\n");
             continue;
         }
@@ -152,16 +139,10 @@ void server_process(connectinfo_t **cnxinfo){
         int rv = serv_int_dispatch(cnxinfo);
         printf("Function return: %d\n", rv);
 
-        // if (*cnxinfo != NULL){
-        //     printf("Closed client socket.\n");
-        //     close((*cnxinfo)->sockfd);
-        //     free(*cnxinfo);
-        //     *cnxinfo = NULL;
-        // }
     }
 }
 
-int server_abort(connectinfo_t **cnx, server_t *serv, int s){
+int server_abort(connectinfo_t *cnx, server_t *serv, int s){
     close(s);
     free(cnx);
     free(serv);
@@ -169,12 +150,12 @@ int server_abort(connectinfo_t **cnx, server_t *serv, int s){
     return 0;
 }
 
-ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t len){
+ssize_t serv_int_send(connectinfo_t *cnxinfo, const void *data, size_t len){
     // need to be able to handle large files
     int bytes_sent, bytes_left = len, total=0;
     while(total < len) { //similar to beej's partial send()s example
         // Send client piece of file
-        bytes_sent = send((*cnxinfo)->sockfd, data+total, bytes_left, 0);
+        bytes_sent = send(cnxinfo->sockfd, data+total, bytes_left, 0);
         // printf("%.*s", bytes_sent, buf);
         if (bytes_sent == -1){
             printf("Bytes sent in last message: %d ", bytes_sent);
@@ -190,37 +171,36 @@ ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t len){
     return total;
 }
 
-ssize_t serv_int_recv(connectinfo_t **cnxinfo, char *req_buf){ //maybe needs to be req_buf[]
-    
-    // int bytes_recvd = 0; // # of bytes_received this msg
+ssize_t serv_int_recv(connectinfo_t *cnxinfo, char *req_buf){ //maybe needs to be req_buf[]
+    int bytes_recvd = 0; // # of bytes_received this msg
     int total_num = 0; // counter for req_buf 
-    // char tmp_buf[MAX_REQUEST_LEN];
+    char tmp_buf[MAX_REQUEST_LEN];
 
     /* Recieve the request into tmp_buf, then copying the recieved bytes to the
     * current offset in recv_buf */
-    // while (total_num < MAX_REQUEST_LEN){
-    //     bytes_recvd = recv((*cnxinfo)->sockfd, &tmp_buf[0], MAX_REQUEST_LEN, 0);
-    //     printf("bytes received: \"%.*s\"\n", bytes_recvd, tmp_buf);
+    while (total_num < MAX_REQUEST_LEN){
+        bytes_recvd = recv(cnxinfo->sockfd, &tmp_buf[0], MAX_REQUEST_LEN, 0);
+        printf("bytes received: \"%.*s\"\n", bytes_recvd, tmp_buf);
             
-    //     if (bytes_recvd <= 0){ // 0 bytes recieved = closed connection; <0 bytes = error
-    //         printf("%d bytes received. \n", bytes_recvd);
-    //         printf("Client has closed their connection or there was an error. \n\n");
-    //         (*cnxinfo)->cnx_status = INVALID; //INVALID
-    //         break;
-    //     } 
-    //     memcpy(&(req_buf[total_num]), &tmp_buf, bytes_recvd); 
-    //     total_num += bytes_recvd;
-    //     if (total_num > MAX_REQUEST_LEN) {
-    //         fprintf(stderr, "Request is too long: %d bytes \n", total_num);
-    //         (*cnxinfo)->cnx_status = INVALID; //INVALID
-    //         exit(1);
-    //     }
-    //     /* Locate a substring with the end-of-response message - if NULL, then the client hasn't
-    //         * finished sending the message */
-    //     if ((memmem(&req_buf, MAX_REQUEST_LEN, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
-    //         break; //success
-    //     }
-    // }
+        if (bytes_recvd <= 0){ // 0 bytes recieved = closed connection; <0 bytes = error
+            printf("%d bytes received. \n", bytes_recvd);
+            printf("Client has closed their connection or there was an error. \n\n");
+            cnxinfo->cnx_status = INVALID; //INVALID
+            break;
+        } 
+        memcpy(&(req_buf[total_num]), &tmp_buf, bytes_recvd); 
+        total_num += bytes_recvd;
+        if (total_num > MAX_REQUEST_LEN) {
+            fprintf(stderr, "Request is too long: %d bytes \n", total_num);
+            cnxinfo->cnx_status = INVALID; //INVALID
+            exit(1);
+        }
+        /* Locate a substring with the end-of-response message - if NULL, then the client hasn't
+         * finished sending the message */
+        if ((memmem(req_buf, MAX_REQUEST_LEN, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
+            break; //success
+        }
+    }
     return total_num;
 }
 
@@ -273,12 +253,12 @@ int serv_int_listen_accept(server_t **serv, int *s){
     return sockfd;
 }
 
-void serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]){
+void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]){
     char *substr;
 
     /* Make sure it's a complete request by checking end characters */
     if ((substr = strstr(req_buf, eor_sig)) == NULL) { 
-        (*cnxinfo)->cnx_status = INVALID;
+        cnxinfo->cnx_status = INVALID;
         printf("%.128s\n", req_buf);
         fprintf(stderr, "End of request characters not found.\n");
         exit(1);
@@ -286,28 +266,28 @@ void serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]){
 
     /* Serves as a router for request handling - check if these are first characters*/
     if (strncmp("STATUS", req_buf, strlen("STATUS")) == 0) {  // might need to subtract 1 from len
-      (*cnxinfo)->request_type = STATUS;
+      cnxinfo->request_type = STATUS;
     } else if (strncmp("INIT", req_buf, strlen("INIT")) == 0){
-      (*cnxinfo)->request_type = INIT;
+      cnxinfo->request_type = INIT;
     } else if (strncmp("POSDATA", req_buf, strlen("POSDATA")) == 0){
-      (*cnxinfo)->request_type = POSDATA;
+      cnxinfo->request_type = POSDATA;
     } else if (strncmp("GETFORCE", req_buf, strlen("GETFORCE")) == 0){
-      (*cnxinfo)->request_type = GETFORCE;
+      cnxinfo->request_type = GETFORCE;
     } else if (strncmp("ABORT", req_buf, strlen("ABORT")) == 0){
-      (*cnxinfo)->request_type = ABORT;
+      cnxinfo->request_type = ABORT;
     } else if (strncmp("ECHO", req_buf, strlen("ECHO")) == 0){
-      (*cnxinfo)->request_type = ECHO;
+      cnxinfo->request_type = ECHO;
     } else {
-      (*cnxinfo)->request_type = -1;
-      (*cnxinfo)->cnx_status = INVALID;
+      cnxinfo->request_type = -1;
+      cnxinfo->cnx_status = INVALID;
       fprintf(stderr, "No request string found.\n");
     }
 }
 
-int serv_int_dispatch(connectinfo_t **cnxinfo){
+int serv_int_dispatch(connectinfo_t *cnxinfo){
     int rv = -1;
 
-    switch((*cnxinfo)->request_type) {
+    switch(cnxinfo->request_type) {
 
         case STATUS:
             rv = protocol_echo(cnxinfo);
@@ -337,16 +317,16 @@ int serv_int_dispatch(connectinfo_t **cnxinfo){
     return rv;
 }
 
-int protocol_echo(connectinfo_t **cnxinfo){
+int protocol_echo(connectinfo_t *cnxinfo){
     int bytes_rcvd, bytes_returned;
     char msg_from_client[MAX_REQUEST_LEN];
 
     // Recieve Client calls
     bytes_rcvd = serv_int_recv(cnxinfo, msg_from_client);
-    printf("Bytes sent: %.128i\n", bytes_rcvd);
+    printf("Bytes rcvd: %d\n", bytes_rcvd);
 
     // Echo recieved data back to client
-    bytes_returned = serv_int_send(cnxinfo, msg_from_client, (*cnxinfo)->request_len);
+    bytes_returned = serv_int_send(cnxinfo, msg_from_client, bytes_rcvd);
     if (bytes_returned == -1){
       printf("Server failed to return message. \n");
       exit(1);

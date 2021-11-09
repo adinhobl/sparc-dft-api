@@ -1,7 +1,6 @@
 import socket
 
-echo_sig = "ECHO "
-calc_sig = "ASE CALC "
+echo_sig = "ECHO"
 eor_sig = "\r\n\r\n"
 
 class SocketClient:
@@ -51,10 +50,7 @@ class SocketClient:
             print('Closing socket')
             self.sock.close()
 
-    def echo_message(self, message:str="test"):
-        self._send_message(echo_sig + message + eor_sig)
-        self._recv_message()
-
-    def send_calc_request(self, message:str="test"):
-        self._send_message(calc_sig + message + eor_sig)
+    def echo(self, message:str="test"):
+        self._send_message(echo_sig + eor_sig)
+        self._send_message(message + eor_sig)
         self._recv_message()

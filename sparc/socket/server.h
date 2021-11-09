@@ -125,7 +125,7 @@ void server_set_maxqueue(server_t **serv, int max_queue);
  *          port information will be populated.
  *  s: file descriptor for the socket communications
  */
-connectinfo_t **server_connect(server_t **serv, int *s);
+connectinfo_t *server_connect(server_t **serv, int *s);
 
 /*
  * Begins the server loop to process client queries. Roughly, this
@@ -137,7 +137,7 @@ connectinfo_t **server_connect(server_t **serv, int *s);
  * This loop does not (yet terminate) but hoopefully will
  * in the future with client calls.
  */ 
-void server_process(connectinfo_t ** cnxinfo);
+void server_process(connectinfo_t *cnxinfo);
 
 /* 
  * Cleans up current session by closing sockets, freeing ports, freeing
@@ -152,7 +152,7 @@ void server_process(connectinfo_t ** cnxinfo);
  * 
  * Returns: status code (right now, just 0)
  */
-int server_abort(connectinfo_t **cnx, server_t *serv, int s);
+int server_abort(connectinfo_t *cnx, server_t *serv, int s);
 
 
 /*****                                       *****
@@ -170,10 +170,10 @@ int server_abort(connectinfo_t **cnx, server_t *serv, int s);
  *          function can send its data. 
  *  data: pointer to the beginning of the message that needs to 
  *          be sent. data can be characters or other data formats
- *  size: the size of the message at data that needs to be sent, 
+ *  len: the size of the message at data that needs to be sent, 
  *          in bytes
  */
-ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t size);
+ssize_t serv_int_send(connectinfo_t *cnxinfo, const void *data, size_t len);
 
 /*
  * Recieves a buffer of data of unknown size (max size MAX_REQUEST_LEN)
@@ -192,7 +192,7 @@ ssize_t serv_int_send(connectinfo_t **cnxinfo, const void *data, size_t size);
  *  req_buf: a buffer of max size MAX_REQUEST_LEN that is used to hold
  *          the short messages for this protocol
  */
-ssize_t serv_int_recv(connectinfo_t **cnxinfo, char req_buf[]);
+ssize_t serv_int_recv(connectinfo_t *cnxinfo, char req_buf[]);
 
 /*
  * Binds the server with parameters specified by serv to 
@@ -233,7 +233,7 @@ int serv_int_listen_accept(server_t **serv, int *s);
  *  req_buf: the message from the client including the header that
  *          specifies which handling function to route to
  */
-void serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]);
+void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]);
 
 /*
  * Dispatches client messages to the appropriate handler function 
@@ -243,7 +243,7 @@ void serv_int_parse_request(connectinfo_t **cnxinfo, char req_buf[]);
  *  cnxinfo: information about the client-server connection so the 
  *          handling functions can send its data.
  */
-int serv_int_dispatch(connectinfo_t **cnxinfo);
+int serv_int_dispatch(connectinfo_t *cnxinfo);
 
 
 /*****                                       *****
@@ -258,4 +258,4 @@ int serv_int_dispatch(connectinfo_t **cnxinfo);
  *          function can send its data.
  *  request: data that will be sent directly back to the client
  */
-int protocol_echo(connectinfo_t **cnxinfo);
+int protocol_echo(connectinfo_t *cnxinfo);
