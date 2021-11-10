@@ -297,11 +297,11 @@ int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state){
     switch(cnxinfo->request_type) {
 
         case STATUS:
-            rv = protocol_echo(cnxinfo);
+            rv = protocol_status(cnxinfo, calc_state);
             break;
             
         case INIT:
-            rv = protocol_echo(cnxinfo);
+            rv = protocol_init(cnxinfo, calc_state);
             break;
         
         case POSDATA:
@@ -329,7 +329,7 @@ int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state){
 }
 
 void serv_int_init_calc_state(calc_state_t *calc_state){
-    calc_state->bead_index = 0;
+    calc_state->bead_index = -1;
     calc_state->init_string_len = 0;
     calc_state->init_string = NULL;
     // calc_state->cell_matrix; // uninitialized
@@ -338,7 +338,7 @@ void serv_int_init_calc_state(calc_state_t *calc_state){
     calc_state->atom_coords = NULL; 
     calc_state->potential = 0.0;
     // calc_state->virial; // uninitialized
-    // JSON string len
+    // JSON string_len
     // JSON String
 }
 
@@ -352,11 +352,39 @@ void serv_int_clean_calc_state(calc_state_t *calc_state){
     }
 }
 
-// int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+    int rv, bytes_sent;
+    if (calc_state->bead_index == -1){
+        bytes_sent = serv_int_send(cnxinfo, "NEEDINIT", strlen("NEEDINIT")+1);
+    } else if (calc_state->num_atoms == 0){
+        bytes_sent = serv_int_send(cnxinfo, "READY", strlen("READY")+1);
+    } else {
+        bytes_sent = serv_int_send(cnxinfo, "HAVEDATA", strlen("HAVEDATA")+1);
+    }
 
+    if (bytes_sent > 0){
+        rv = 0;
+    } else {
+        rv = 1;
+    }
+    return rv;
+}
+
+// int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+//     recv 
+//     interpret as int
+//     recv 
+//     interpret as int
+//     if int > 0{
+//         realloc, also check null pointer
+//         recv into buffer
+//     } else if ==0 and pointer is not null, {
+//         free and set pointer to null
+//     } else {
+//         error
+//     }
+    
 // }
-
-
 
 int protocol_echo(connectinfo_t *cnxinfo){
     int bytes_rcvd, bytes_returned;

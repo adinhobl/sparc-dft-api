@@ -308,12 +308,35 @@ void serv_int_clean_calc_state(calc_state_t *calc_state);
  */
 
 /* 
- *
+ * Upon receiving a "STATUS" message from the client, computes the current
+ * state of the server. If the bead_index hasn't been initialized, then 
+ * server replies "NEEDINIT". If the bead_index has been supplied, then
+ * server checks if the atomic configuration has been supplied. If it 
+ * hasn't, server replies "READY" to receive atomic data. If it has, the 
+ * server replies "HAVEDATA" to indicate that it has the necessary data to
+ * run calculations.
+ * 
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so the 
+ *          handling functions can send its data.
+ *  calc_state: a pointer to a calc_state_t object with fields used to
+ *          initialize and track the state of a calculation.
  */
 int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 
 /* 
- *
+ * After recieving "INIT" from the client, the server receives an int32
+ * for the bead_index, and int32 for the number of bits in an initialization
+ * string, and finally the initialization string. If the init string is 
+ * null, it allocates new string. If not null, reallocates the string to the 
+ * new size. Can be used to reinitialize the calculation (i.e. not following)
+ * the very first "STATUS" query.
+ * 
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so the 
+ *          handling functions can send its data.
+ *  calc_state: a pointer to a calc_state_t object with fields used to
+ *          initialize and track the state of a calculation.
  */
 int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 

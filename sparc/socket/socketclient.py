@@ -48,6 +48,22 @@ class SocketClient:
         print('Closing socket.')
         self.sock.close()
 
+    def status(self):
+        print("getting status")
+        self._send_message("STATUS" + eor_sig)
+        self._recv_message()
+
+    def init(self, bead_index=1, init_str="hello"):
+        print("initializing")
+        self._send_message("INIT" + eor_sig)
+        self._send_message(str(bead_index).encode('utf8') + eor_sig)
+        init_str_len = len(init_str)
+        self._send_message(str(init_str_len).encode('utf8') + eor_sig)
+        if init_str_len > 0:
+            self._send_message(init_str + eor_sig)
+
+        
+
 # status_sig = "STATUS"
 # init_sig = "INIT"
 # posdata_sig = "POSDATA"
