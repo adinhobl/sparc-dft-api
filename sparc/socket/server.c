@@ -119,7 +119,10 @@ connectinfo_t *server_connect(server_t **serv, int *s){
 void server_process(connectinfo_t *cnxinfo){
     char req_buf[MAX_REQUEST_LEN];
     int rv = 0;
+    calc_state_t calc_state;
     
+    serv_int_init_calc_state(&calc_state);
+
     /* For each interaction - continues until abort call or error*/
     while (rv == 0){
 
@@ -129,17 +132,19 @@ void server_process(connectinfo_t *cnxinfo){
         /* Parse the request, decide status */
                 // printf("%.128s\n", req_buf);
         serv_int_parse_request(cnxinfo, req_buf);
-        printf("Request Parsed.\n");
+        // printf("Request Parsed.\n");
         if (cnxinfo->cnx_status == INVALID){
-            printf("Invalid Request\n");
+            printf("Invalid Request, attempt a different call.\n");
             continue;
         }
 
         /* Process request cases*/
-        int rv = serv_int_dispatch(cnxinfo);
-        printf("Function return: %d\n", rv);
+        rv = serv_int_dispatch(cnxinfo, &calc_state);
+        // printf("Function return: %d\n", rv);
 
     }
+
+    serv_int_clean_calc_state(&calc_state);
 }
 
 int server_abort(connectinfo_t *cnx, server_t *serv, int s){
@@ -273,6 +278,8 @@ void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]){
       cnxinfo->request_type = POSDATA;
     } else if (strncmp("GETFORCE", req_buf, strlen("GETFORCE")) == 0){
       cnxinfo->request_type = GETFORCE;
+    } else if (strncmp("GETSTRESS", req_buf, strlen("GETSTRESS")) == 0){
+      cnxinfo->request_type = GETSTRESS;
     } else if (strncmp("ABORT", req_buf, strlen("ABORT")) == 0){
       cnxinfo->request_type = ABORT;
     } else if (strncmp("ECHO", req_buf, strlen("ECHO")) == 0){
@@ -284,7 +291,7 @@ void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]){
     }
 }
 
-int serv_int_dispatch(connectinfo_t *cnxinfo){
+int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state){
     int rv = -1;
 
     switch(cnxinfo->request_type) {
@@ -304,6 +311,10 @@ int serv_int_dispatch(connectinfo_t *cnxinfo){
         case GETFORCE: 
             rv = protocol_echo(cnxinfo);
             break;
+
+        case GETSTRESS: 
+            rv = protocol_echo(cnxinfo);
+            break;
         
         case ABORT:
             rv = 1; // simply want to shut server down without interactions
@@ -316,6 +327,36 @@ int serv_int_dispatch(connectinfo_t *cnxinfo){
     }
     return rv;
 }
+
+void serv_int_init_calc_state(calc_state_t *calc_state){
+    calc_state->bead_index = 0;
+    calc_state->init_string_len = 0;
+    calc_state->init_string = NULL;
+    // calc_state->cell_matrix; // uninitialized
+    // calc_state->inv_matrix; // uninitialized
+    calc_state->num_atoms = 0;
+    calc_state->atom_coords = NULL; 
+    calc_state->potential = 0.0;
+    // calc_state->virial; // uninitialized
+    // JSON string len
+    // JSON String
+}
+
+void serv_int_clean_calc_state(calc_state_t *calc_state){
+    if (calc_state->init_string != NULL){
+        free(calc_state->init_string);
+    }
+
+    if (calc_state->atom_coords != NULL){
+        free(calc_state->atom_coords);
+    }
+}
+
+// int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+
+// }
+
+
 
 int protocol_echo(connectinfo_t *cnxinfo){
     int bytes_rcvd, bytes_returned;

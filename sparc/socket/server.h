@@ -37,6 +37,7 @@ typedef int serverstatus_t;
 #define INIT 2
 #define POSDATA 3
 #define GETFORCE 4
+#define GETSTRESS 5
 #define ECHO 99
 
 /*
@@ -44,21 +45,43 @@ typedef int serverstatus_t;
  * information about the socket connection session
  * 
  * sockfd: the file descriptor for the current socket
- * STATUS: tracks the status of the current session. At
+ * cnx_status: tracks the status of the current session. At
  *         many places throughout the code, this is checked
  * request_type: stores the type of interaction after parsing
  *         the client request. This determines which handling 
  *         functions are called later.
- * request_len: the length of the initial message passed by
- *         the client, not including the beginning signature
- *         or ending signature
  */
 typedef struct connectinfo_t{
     int sockfd;
     serverstatus_t cnx_status;
     int request_type;
-    int request_len;
 } connectinfo_t;
+
+
+/*
+ * Struct that tracks information on the current state of 
+ * the calculation.
+ * 
+ * sockfd: the file descriptor for the current socket
+ * cnx_status: tracks the status of the current session. At
+ *         many places throughout the code, this is checked
+ * request_type: stores the type of interaction after parsing
+ *         the client request. This determines which handling 
+ *         functions are called later.
+ */
+typedef struct calc_state_t{
+    int32_t bead_index;
+    int32_t init_string_len;
+    char *init_string;
+    double cell_matrix[9];
+    double inv_matrix[9];
+    int32_t num_atoms;
+    double *atom_coords; 
+    double potential;
+    double virial[9];  
+    // JSON string len
+    // JSON String
+} calc_state_t;
 
 
 /* 
@@ -242,13 +265,72 @@ void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]);
  * Arguments:
  *  cnxinfo: information about the client-server connection so the 
  *          handling functions can send its data.
+ *  calc_state: a pointer to a calc_state_t object with fields used to
+ *          initialize and track the state of a calculation.
  */
-int serv_int_dispatch(connectinfo_t *cnxinfo);
+int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state);
+
+/* 
+ * Initializes the calculation state that will be reused for all the
+ * calculations. This state will be updated based on server-client  
+ * communications and the results of any calculation. Maintaining the 
+ * state allows for more granular and dynamic update and query calls.
+ * Most fields are initialized with zeros or left uninitialized. Whether
+ * state has changed from its initialized values partially determines
+ * the server's response to client queries.
+ * 
+ * Arguments:
+ *  calc_state: a pointer to a calc_state_t object with fields used to
+ *          initialize and track the state of a calculation.
+ * 
+ */
+void serv_int_init_calc_state(calc_state_t *calc_state);
+
+/* 
+ * Cleans up the calculation state. Frees any memory with a pointer in
+ * the calc_state object.
+ * 
+ * Arguments:
+ *  calc_state: a pointer to a calc_state_t object with fields used to
+ *          initialize and track the state of a calculation.
+ * 
+ */
+void serv_int_clean_calc_state(calc_state_t *calc_state);
 
 
 /*****                                       *****
  *****    Protocol functions for messages    *****
  *****                                       *****/ 
+
+/* NOTE: All protocol functions should return (int) 0 unless they error
+ *       or are requesting the server to break out of the calculation
+ *       loop.
+ */
+
+/* 
+ *
+ */
+int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state);
+
+/* 
+ *
+ */
+int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state);
+
+/* 
+ *
+ */
+int protocol_posdata(connectinfo_t *cnxinfo, calc_state_t *calc_state);
+
+/* 
+ *
+ */
+int protocol_getforce(connectinfo_t *cnxinfo, calc_state_t *calc_state);
+
+/* 
+ *
+ */
+int protocol_getstress(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 
 /*
  * Echos the request data back to the client. 
