@@ -66,9 +66,15 @@ class SocketClient:
     def posdata(self):
         print("sending data")
         self._send_message("POSDATA" + eor_sig)
-        self._send_message(self.get_matrix.encode('utf8') + eor_sig)
+        matrix = self.get_matrix
+        for row in matrix:
+            for item in row:
+                self._send_message(item)
         self._send_message(self.get_num_atoms.encode('utf8') + eor_sig)
-        self._send_message(self.get_coords.encode('utr8') + eor_sig)
+        coords = self.get_coords
+        for row in coords:
+            for item in row:
+                self._send_message(item)
 
     def getforce(self):
         print("getting force")
@@ -98,12 +104,10 @@ class SocketClient:
             return [pot, force, vir]
         
     def get_coords(self):
-        matrix = self.atoms.get_positions()
-        return ','.join(str(item) for innerlist in matrix for item in innerlist)
+        return self.atoms.get_positions()
 
     def get_matrix(self):
-        matrix = self.atoms.cell[:]
-        return ','.join(str(item) for innerlist in matrix for item in innerlist)
+        return self.atoms.cell[:]
 
     def get_num_atoms(self):
         return str(len(self.atoms))
