@@ -217,7 +217,7 @@ ssize_t serv_send(connectinfo_t *cnxinfo, const void *data, size_t len);
  *          the short messages for this protocol
  *  max_size: maximum length of the message that can be recieved
  */
-ssize_t serv_recv(connectinfo_t *cnxinfo, char req_buf[], int max_size);
+ssize_t serv_recv_msg(connectinfo_t *cnxinfo, char req_buf[], int max_size);
 
 /*
  * Receives an array of doubles (float64) of known length into arr_buf.
@@ -234,6 +234,21 @@ ssize_t serv_recv(connectinfo_t *cnxinfo, char req_buf[], int max_size);
  *  num_elements: number of doubles to receive
  */
 ssize_t serv_recv_arr(connectinfo_t *cnxinfo, double *arr_buf, int num_elements);
+
+/*
+ * Receives an int32 into int_ptr.
+ * Handles partial recvs. Returns the total number of bytes recvd.
+ * 
+ * NOTE: Could potentially have issues due to float representations or
+ * endian-ness.
+ *
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so this
+ *          function can send its data. 
+ *  arr_buf: a buffer of num_elements * sizeof(double) bytes to recv 
+ *          the array into.
+ */
+ssize_t serv_recv_int(connectinfo_t *cnxinfo, int *int_ptr);
 
 /*
  * Binds the server with parameters specified by serv to 

@@ -13,7 +13,7 @@ Refer to i-Pi protocol: https://ipi-code.org/i-pi/user-guide.html#communication-
 
 # Future Work
 ## Near Term
-* there may be issues keeping all messages ordered when running multiple commands really quickly... Not sure what to do about this.
+* there may be issues keeping all messages ordered when running multiple commands really quickly... Not sure what to do about this... It might be that you take too much out of the stream at some point, and it messes up the eor_sigs. Might just be that it goes too fast and the socket hasn't been completely opened for proper comms...
 * do I need to handle cases where the end of response sentinal value isn't found while processing comms?
 * call to shut down the server and/or close socket connection - serv_int_abort
 * expand protocols
@@ -37,6 +37,7 @@ Refer to i-Pi protocol: https://ipi-code.org/i-pi/user-guide.html#communication-
     * https://stackoverflow.com/questions/8885663/how-to-format-a-floating-number-to-fixed-width-in-python
     * https://stackoverflow.com/questions/20037379/how-to-convert-python-socket-stream-string-value-to-float
     * https://stackoverflow.com/questions/50494918/send-array-of-floats-over-a-socket-connection
+* potentially make serv_recv_arr and serv_recv_int one function that takes num_elements and a type.
 
 ## Long Term
 * Handle Multiple unit types https://ipi-code.org/i-pi/introduction.html#internal-units

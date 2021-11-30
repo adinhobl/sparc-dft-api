@@ -1,4 +1,5 @@
 import socket
+import sys
 import numpy as np
 
 eor_sig = "\r\n\r\n"
@@ -68,15 +69,25 @@ class SocketClient:
         print("sending position data")
         self._send_message("POSDATA")
 
+        # to improve this code's speed, see packing and unpacking https://stackoverflow.com/a/50495001
+
         for i in list(cell_vec_mat):
             print(i)
             self.sock.send(i)
+        print('\n')
 
         for i in list(inv_mat):
             print(i)
             self.sock.send(i)
+        print('\n')
 
-        self._send_message(str(num_atoms))
+        na = num_atoms.to_bytes(4, byteorder=sys.byteorder)
+        self.sock.send(na)
+        print(na, '--->', num_atoms, '\n')
+
+        for i in list(atom_positions.flatten()):
+            print(i)
+            self.sock.send(i)
 
         
 
