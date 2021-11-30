@@ -67,11 +67,16 @@ class SocketClient:
     def posdata(self, cell_vec_mat, inv_mat, num_atoms, atom_positions):
         print("sending position data")
         self._send_message("POSDATA")
-        # [str(i) + '\n' for i in cell_vec_mat]
-        # join "" ^^
 
         for i in list(cell_vec_mat):
-            self._send_message(i)
+            print(i)
+            self.sock.send(i)
+
+        for i in list(inv_mat):
+            print(i)
+            self.sock.send(i)
+
+        self._send_message(str(num_atoms))
 
         
 

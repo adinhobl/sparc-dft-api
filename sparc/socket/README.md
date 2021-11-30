@@ -13,6 +13,7 @@ Refer to i-Pi protocol: https://ipi-code.org/i-pi/user-guide.html#communication-
 
 # Future Work
 ## Near Term
+* there may be issues keeping all messages ordered when running multiple commands really quickly... Not sure what to do about this.
 * do I need to handle cases where the end of response sentinal value isn't found while processing comms?
 * call to shut down the server and/or close socket connection - serv_int_abort
 * expand protocols

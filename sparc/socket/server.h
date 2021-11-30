@@ -186,7 +186,9 @@ int server_abort(connectinfo_t *cnx, server_t *serv, int s);
  * Sends a buffer of data of length size to the client based
  * on connection info from cnxinfo. Is superior to a regular 
  * send call because it will handle incomplete sends of single
- * messages and ensure that the full message is sent.
+ * messages and ensure that the full message is sent. Handles
+ * encapsulation of messages with sentinel characters. Useful
+ * for sending character byte-encoded data.
  * 
  * Arguments:
  *  cnxinfo: information about the client-server connection so this
@@ -196,15 +198,17 @@ int server_abort(connectinfo_t *cnx, server_t *serv, int s);
  *  len: the size of the message at data that needs to be sent, 
  *          in bytes
  */
-ssize_t serv_int_send(connectinfo_t *cnxinfo, const void *data, size_t len);
+ssize_t serv_send(connectinfo_t *cnxinfo, const void *data, size_t len);
 
 /*
- * Recieves a buffer of data of unknown size (max size TMP_BUF_SIZE)
+ * Receives a buffer of data of unknown size (max size TMP_BUF_SIZE)
  * from the client based on connection info from cnxinfo. Is superior
  * to a regular send call because it will handle incomplete recvs of single
  * messages and ensure that the full message is sent. To do this, it scans
  * for the End-Of-Response sentinel characters, eor_sig. req_buf will be 
- * cleared at the beginning of this function.
+ * cleared at the beginning of this function. Handles encapsulation of 
+ * messages with sentinel characters. Useful for receiving character 
+ * byte-encoded data.
  *  
  * Arguments:
  *  cnxinfo: information about the client-server connection so this
@@ -213,7 +217,23 @@ ssize_t serv_int_send(connectinfo_t *cnxinfo, const void *data, size_t len);
  *          the short messages for this protocol
  *  max_size: maximum length of the message that can be recieved
  */
-ssize_t serv_int_recv(connectinfo_t *cnxinfo, char req_buf[], int max_size);
+ssize_t serv_recv(connectinfo_t *cnxinfo, char req_buf[], int max_size);
+
+/*
+ * Receives an array of doubles (float64) of known length into arr_buf.
+ * Handles partial recvs. Returns the total number of bytes recvd.
+ * 
+ * NOTE: Could potentially have issues due to float representations or
+ * endian-ness.
+ *
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so this
+ *          function can send its data. 
+ *  arr_buf: a buffer of num_elements * sizeof(double) bytes to recv 
+ *          the array into.
+ *  num_elements: number of doubles to receive
+ */
+ssize_t serv_recv_arr(connectinfo_t *cnxinfo, double *arr_buf, int num_elements);
 
 /*
  * Binds the server with parameters specified by serv to 
@@ -223,7 +243,7 @@ ssize_t serv_int_recv(connectinfo_t *cnxinfo, char req_buf[], int max_size);
  *  serv: pointer to server_t object from server_create() 
  *  s: socket number to bind the server
  */
-void serv_int_bind_socket(server_t **serv, int *s);
+void serv_bind_socket(server_t **serv, int *s);
 
 /*
  * Listens and accepts client connections. Returns a file
@@ -234,7 +254,7 @@ void serv_int_bind_socket(server_t **serv, int *s);
  *  serv: pointer to server_t object from server_create() 
  *  s: socket number to bind the server
  */
-int serv_int_listen_accept(server_t **serv, int *s);
+int serv_listen_accept(server_t **serv, int *s);
 
 /* 
  * Parses the client message to determine where to route the message
@@ -254,7 +274,7 @@ int serv_int_listen_accept(server_t **serv, int *s);
  *  req_buf: the message from the client including the header that
  *          specifies which handling function to route to
  */
-void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]);
+void serv_parse_request(connectinfo_t *cnxinfo, char req_buf[]);
 
 /*
  * Dispatches client messages to the appropriate handler function 
@@ -266,7 +286,7 @@ void serv_int_parse_request(connectinfo_t *cnxinfo, char req_buf[]);
  *  calc_state: a pointer to a calc_state_t object with fields used to
  *          initialize and track the state of a calculation.
  */
-int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state);
+int serv_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 
 /* 
  * Initializes the calculation state that will be reused for all the
@@ -282,7 +302,7 @@ int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state);
  *          initialize and track the state of a calculation.
  * 
  */
-void serv_int_init_calc_state(calc_state_t *calc_state);
+void serv_init_calc_state(calc_state_t *calc_state);
 
 /* 
  * Cleans up the calculation state. Frees any memory with a pointer in
@@ -293,7 +313,7 @@ void serv_int_init_calc_state(calc_state_t *calc_state);
  *          initialize and track the state of a calculation.
  * 
  */
-void serv_int_clean_calc_state(calc_state_t *calc_state);
+void serv_clean_calc_state(calc_state_t *calc_state);
 
 
 /*****                                       *****
