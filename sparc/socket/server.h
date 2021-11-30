@@ -18,7 +18,7 @@
  * would solely by the amount that a single recv could get, and
  * not the full message length
  */
-#define MAX_REQUEST_LEN 128 
+#define TMP_BUF_SIZE 128 
 
 /*
  * Defines status codes for common statuses and errors in server
@@ -199,23 +199,21 @@ int server_abort(connectinfo_t *cnx, server_t *serv, int s);
 ssize_t serv_int_send(connectinfo_t *cnxinfo, const void *data, size_t len);
 
 /*
- * Recieves a buffer of data of unknown size (max size MAX_REQUEST_LEN)
+ * Recieves a buffer of data of unknown size (max size TMP_BUF_SIZE)
  * from the client based on connection info from cnxinfo. Is superior
  * to a regular send call because it will handle incomplete recvs of single
  * messages and ensure that the full message is sent. To do this, it scans
  * for the End-Of-Response sentinel characters, eor_sig. req_buf will be 
  * cleared at the beginning of this function.
- * 
- * NOTE: for messages longer than MAX_REQUEST_LEN, you will want to allocate
- *       memory instead of using this.
- * 
+ *  
  * Arguments:
  *  cnxinfo: information about the client-server connection so this
  *          function can send its data. 
- *  req_buf: a buffer of max size MAX_REQUEST_LEN that is used to hold
+ *  req_buf: a buffer of max size TMP_BUF_SIZE that is used to hold
  *          the short messages for this protocol
+ *  max_size: maximum length of the message that can be recieved
  */
-ssize_t serv_int_recv(connectinfo_t *cnxinfo, char req_buf[]);
+ssize_t serv_int_recv(connectinfo_t *cnxinfo, char req_buf[], int max_size);
 
 /*
  * Binds the server with parameters specified by serv to 
@@ -332,6 +330,10 @@ int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state);
  * new size. Can be used to reinitialize the calculation (i.e. not following)
  * the very first "STATUS" query.
  * 
+ * Note: after this step, the initialization string will be `init_string_len`
+ * length, which does not include a null terminator or end-of-response 
+ * signature. 
+ * 
  * Arguments:
  *  cnxinfo: information about the client-server connection so the 
  *          handling functions can send its data.
@@ -341,7 +343,18 @@ int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 
 /* 
- *
+ * Once INIT data is recieved, the next interaction is for the client to
+ * send the server atomic position data. First, 9 float64s for the cell
+ * vector matrix are sent to the server, followed by 9 float64s for the
+ * inverse matrix. Then 1 int is sent to denote the number of atoms in
+ * the simulation. Finally, the client sends 3 float64 coordinates for
+ * each atom in the simulation.
+ * 
+ * Arguments:
+ *  cnxinfo: information about the client-server connection so the 
+ *          handling functions can send its data.
+ *  calc_state: a pointer to a calc_state_t object with fields used to
+ *          initialize and track the state of a calculation.
  */
 int protocol_posdata(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 

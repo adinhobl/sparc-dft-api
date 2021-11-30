@@ -1,4 +1,5 @@
 import socket
+import numpy as np
 
 eor_sig = "\r\n\r\n"
 
@@ -25,8 +26,9 @@ class SocketClient:
         if self.sock is None:
             raise TypeError("Must call `connect` before `send_message`.")
         try:
-            print('Sending:', message)
-            self.sock.send(message.encode())
+            m = message + eor_sig
+            print('Sending:', m)
+            self.sock.send(m.encode('utf8'))
         except:
             print("There was an issue sending")
 
@@ -38,29 +40,38 @@ class SocketClient:
             print("There was an issue recving")
 
     def echo(self, message:str="test"):
-        self._send_message("ECHO" + eor_sig)
-        self._send_message(message + eor_sig)
+        self._send_message("ECHO")
+        self._send_message(message)
         self._recv_message()
 
     def abort(self):
         print('Instructing server to shut down.')
-        self._send_message("ABORT" + eor_sig)
+        self._send_message("ABORT")
         print('Closing socket.')
         self.sock.close()
 
     def status(self):
         print("getting status")
-        self._send_message("STATUS" + eor_sig)
+        self._send_message("STATUS")
         self._recv_message()
 
-    def init(self, bead_index=1, init_str="hello"):
+    def init(self, bead_index=1, init_str=""):
         print("initializing")
-        self._send_message("INIT" + eor_sig)
-        self._send_message(str(bead_index).encode('utf8') + eor_sig)
+        self._send_message("INIT")
+        self._send_message(str(bead_index))
         init_str_len = len(init_str)
-        self._send_message(str(init_str_len).encode('utf8') + eor_sig)
+        self._send_message(str(init_str_len))
         if init_str_len > 0:
-            self._send_message(init_str + eor_sig)
+            self._send_message(init_str)
+
+    def posdata(self, cell_vec_mat, inv_mat, num_atoms, atom_positions):
+        print("sending position data")
+        self._send_message("POSDATA")
+        # [str(i) + '\n' for i in cell_vec_mat]
+        # join "" ^^
+
+        for i in list(cell_vec_mat):
+            self._send_message(i)
 
         
 

@@ -26,6 +26,16 @@ Refer to i-Pi protocol: https://ipi-code.org/i-pi/user-guide.html#communication-
     * need to correct parse_request to accept more bytes
 * evaluate inet ports vs unix ports (or is it sockets)
 * should client send header and length first? or should it just be pulled from an initialization string?
+* clean up print statements and use actual unit tests
+* it might be possible to remove the cnx_status fields if return codes are better used.
+* Sending floats is a pain in the butt. Is the best we can do converting the floats to strings,   joining the strings on the eor_sig, and then passing the whole thing to the other side to be string decoded?
+    * TCP makes no guarantees (and in testing it was true) that the values would be sent one at a time
+    * all the strings aren't the same length (e.g. 0.123 vs 2345.56753567), and it's not trivial to get padding correct. 
+    * https://stackoverflow.com/questions/40763897/sending-raw-binary-data-over-sockets-in-python-3
+    * https://stackoverflow.com/questions/3264828/change-default-float-print-format
+    * https://stackoverflow.com/questions/8885663/how-to-format-a-floating-number-to-fixed-width-in-python
+    * https://stackoverflow.com/questions/20037379/how-to-convert-python-socket-stream-string-value-to-float
+    * https://stackoverflow.com/questions/50494918/send-array-of-floats-over-a-socket-connection
 
 ## Long Term
 * Handle Multiple unit types https://ipi-code.org/i-pi/introduction.html#internal-units

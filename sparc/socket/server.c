@@ -117,7 +117,7 @@ connectinfo_t *server_connect(server_t **serv, int *s){
 }
 
 void server_process(connectinfo_t *cnxinfo){
-    char req_buf[MAX_REQUEST_LEN];
+    char req_buf[TMP_BUF_SIZE];
     int rv = 0;
     calc_state_t calc_state;
     
@@ -126,8 +126,8 @@ void server_process(connectinfo_t *cnxinfo){
     /* For each interaction - continues until abort call or error*/
     while (rv == 0){
 
-        memset(&req_buf, '\0', MAX_REQUEST_LEN);
-        serv_int_recv(cnxinfo, req_buf);
+        memset(&req_buf, '\0', TMP_BUF_SIZE);
+        serv_int_recv(cnxinfo, req_buf, TMP_BUF_SIZE);
 
         /* Parse the request, decide status */
                 // printf("%.128s\n", req_buf);
@@ -176,15 +176,15 @@ ssize_t serv_int_send(connectinfo_t *cnxinfo, const void *data, size_t len){
     return total;
 }
 
-ssize_t serv_int_recv(connectinfo_t *cnxinfo, char *req_buf){ //maybe needs to be req_buf[]
+ssize_t serv_int_recv(connectinfo_t *cnxinfo, char *req_buf, int max_size){ 
     int bytes_recvd = 0; // # of bytes_received this msg
     int total_num = 0; // counter for req_buf 
-    char tmp_buf[MAX_REQUEST_LEN];
+    char tmp_buf[TMP_BUF_SIZE];
 
     /* Recieve the request into tmp_buf, then copying the recieved bytes to the
     * current offset in recv_buf */
-    while (total_num < MAX_REQUEST_LEN){
-        bytes_recvd = recv(cnxinfo->sockfd, &tmp_buf[0], MAX_REQUEST_LEN, 0);
+    while (total_num < max_size){
+        bytes_recvd = recv(cnxinfo->sockfd, &tmp_buf[0], TMP_BUF_SIZE, 0);
         printf("bytes received: \"%.*s\"\n", bytes_recvd, tmp_buf);
             
         if (bytes_recvd <= 0){ // 0 bytes recieved = closed connection; <0 bytes = error
@@ -195,14 +195,14 @@ ssize_t serv_int_recv(connectinfo_t *cnxinfo, char *req_buf){ //maybe needs to b
         } 
         memcpy(&(req_buf[total_num]), &tmp_buf, bytes_recvd); 
         total_num += bytes_recvd;
-        if (total_num > MAX_REQUEST_LEN) {
+        if (total_num > max_size) {
             fprintf(stderr, "Request is too long: %d bytes \n", total_num);
             cnxinfo->cnx_status = INVALID; //INVALID
             exit(1);
         }
         /* Locate a substring with the end-of-response message - if NULL, then the client hasn't
          * finished sending the message */
-        if ((memmem(req_buf, MAX_REQUEST_LEN, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
+        if ((memmem(req_buf, total_num, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
             break; //success
         }
     }
@@ -305,7 +305,7 @@ int serv_int_dispatch(connectinfo_t *cnxinfo, calc_state_t *calc_state){
             break;
         
         case POSDATA:
-            rv = protocol_echo(cnxinfo);
+            rv = protocol_posdata(cnxinfo, calc_state);
             break;
         
         case GETFORCE: 
@@ -370,28 +370,131 @@ int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state){
     return rv;
 }
 
-// int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state){
-//     recv 
-//     interpret as int
-//     recv 
-//     interpret as int
-//     if int > 0{
-//         realloc, also check null pointer
-//         recv into buffer
-//     } else if ==0 and pointer is not null, {
-//         free and set pointer to null
-//     } else {
-//         error
-//     }
+int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+    char req_buf[TMP_BUF_SIZE];
+    int bytes_rcvd = 0;
+    char *new_init_str_ptr;
     
-// }
+    // bead index
+    bytes_rcvd = serv_int_recv(cnxinfo, req_buf, TMP_BUF_SIZE);
+    printf("bead bytes rcvd: %d\n", bytes_rcvd);
+    calc_state->bead_index = atoi(req_buf);
+    printf("Bead num: %d\n", calc_state->bead_index);
+
+    // initialization string length
+    bytes_rcvd = serv_int_recv(cnxinfo, req_buf, TMP_BUF_SIZE);
+    printf("Bytes rcvd: %d\n", bytes_rcvd);
+    calc_state->init_string_len = atoi(req_buf); // only message len, not eor_sig
+    printf("Init_str_len: %d\n", calc_state->init_string_len);
+
+    // initialization string
+    if (calc_state->init_string_len > 0){
+        int new_str_bytes = sizeof(char) * (calc_state->init_string_len + strlen(eor_sig));
+        printf("new_str_len: %d\n", new_str_bytes); // not null terminated at this point.
+        new_init_str_ptr = realloc(calc_state->init_string, new_str_bytes);
+        if (new_init_str_ptr == NULL){
+            cnxinfo->request_type = -1;
+            cnxinfo->cnx_status = INVALID;
+            fprintf(stderr, "Allocation of initialization string failed.\n");
+            return -1;
+        }
+
+        calc_state->init_string = new_init_str_ptr;
+        bytes_rcvd = serv_int_recv(cnxinfo, calc_state->init_string, new_str_bytes);
+
+        if (bytes_rcvd != new_str_bytes){
+            cnxinfo->request_type = -1;
+            cnxinfo->cnx_status = INVALID;
+            fprintf(stderr, "Full init string not receved.\n");
+            return -1;
+        }
+    } else if (calc_state->init_string != NULL && calc_state->init_string_len == 0){
+        // the newest request has no init string, but previous one did
+        free(calc_state->init_string);
+        calc_state->init_string = NULL;
+    } else if (calc_state->init_string_len < 0){
+        // not an actual positive string length
+        cnxinfo->request_type = -1;
+        cnxinfo->cnx_status = INVALID;
+        fprintf(stderr, "String length is negative.\n");
+        return -1;
+    }
+    //no init string, none previously
+
+    return 0;
+}
+
+int protocol_posdata(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+    int bytes_rcvd;
+    double buf[9];
+
+    // 9 doubles for cell vector matrix
+    bytes_rcvd = serv_int_recv(cnxinfo, &buf, 9);
+    printf("cvm bytes rcvd: %d\n", bytes_rcvd);
+
+
+
+
+    // int bytes_recvd = 0; // # of bytes_received this msg
+    // int total_num = 0; // counter for req_buf 
+    // char tmp_buf[TMP_BUF_SIZE];
+
+    // /* Recieve the request into tmp_buf, then copying the recieved bytes to the
+    // * current offset in recv_buf */
+    // while (total_num < max_size){
+    //     bytes_recvd = recv(cnxinfo->sockfd, &tmp_buf[0], TMP_BUF_SIZE, 0);
+    //     printf("bytes received: \"%.*s\"\n", bytes_recvd, tmp_buf);
+            
+    //     if (bytes_recvd <= 0){ // 0 bytes recieved = closed connection; <0 bytes = error
+    //         printf("%d bytes received. \n", bytes_recvd);
+    //         printf("Client has closed their connection or there was an error. \n\n");
+    //         cnxinfo->cnx_status = INVALID; //INVALID
+    //         break;
+    //     } 
+    //     memcpy(&(req_buf[total_num]), &tmp_buf, bytes_recvd); 
+    //     total_num += bytes_recvd;
+    //     if (total_num > max_size) {
+    //         fprintf(stderr, "Request is too long: %d bytes \n", total_num);
+    //         cnxinfo->cnx_status = INVALID; //INVALID
+    //         exit(1);
+    //     }
+    //     /* Locate a substring with the end-of-response message - if NULL, then the client hasn't
+    //      * finished sending the message */
+    //     if ((memmem(req_buf, total_num, &eor_sig, sizeof(eor_sig)-1)) != NULL){ 
+    //         break; //success
+    //     }
+    // }
+
+    // for (int ii=0; ii<9; ii++){
+    //     calc_state->cell_matrix[ii] = atof(req_buf);
+    // }
+
+    //decode string
+    for (int ii=0; ii<9; ii++){
+        printf("%f\n", calc_state->cell_matrix[ii]);
+    }
+
+
+    // 9 doubles for inverse matrix
+    // for (int ii=0; ii<9; ii++){
+    //     bytes_rcvd = serv_int_recv(cnxinfo, req_buf, TMP_BUF_SIZE);
+    //     printf("cvm bytes rcvd: %d\n", bytes_rcvd);
+    //     calc_state->cell_matrix[ii] = atof(req_buf);
+    // }
+
+    // 1 int32 for number of atoms
+
+    // 3 doubles for cartesian coords of each atom
+
+    return 0;
+}
 
 int protocol_echo(connectinfo_t *cnxinfo){
     int bytes_rcvd, bytes_returned;
-    char msg_from_client[MAX_REQUEST_LEN];
+    char msg_from_client[TMP_BUF_SIZE];
 
     // Recieve Client calls
-    bytes_rcvd = serv_int_recv(cnxinfo, msg_from_client);
+    bytes_rcvd = serv_int_recv(cnxinfo, msg_from_client, TMP_BUF_SIZE);
     printf("Bytes rcvd: %d\n", bytes_rcvd);
 
     // Echo recieved data back to client
@@ -403,3 +506,6 @@ int protocol_echo(connectinfo_t *cnxinfo){
     return 0;
 }
 
+/*****                                               *****
+ *****  Insert Calls to DFT Library, as necessary    *****
+ *****                                               *****/ 
