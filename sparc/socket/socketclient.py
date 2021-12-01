@@ -59,9 +59,14 @@ class SocketClient:
     def init(self, bead_index=1, init_str=""):
         print("initializing")
         self._send_message("INIT")
-        self._send_message(str(bead_index))
+
+        bd = bead_index.to_bytes(4, byteorder=sys.byteorder)
+        self.sock.send(bd)
+        
         init_str_len = len(init_str)
-        self._send_message(str(init_str_len))
+        isl = init_str_len.to_bytes(4, byteorder=sys.byteorder)
+        self.sock.send(isl)
+
         if init_str_len > 0:
             self._send_message(init_str)
 

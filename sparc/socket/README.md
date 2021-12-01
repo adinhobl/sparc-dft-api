@@ -15,20 +15,14 @@ Refer to i-Pi protocol: https://ipi-code.org/i-pi/user-guide.html#communication-
 ## Near Term
 * there may be issues keeping all messages ordered when running multiple commands really quickly... Not sure what to do about this... It might be that you take too much out of the stream at some point, and it messes up the eor_sigs. Might just be that it goes too fast and the socket hasn't been completely opened for proper comms...
 * do I need to handle cases where the end of response sentinal value isn't found while processing comms?
-* call to shut down the server and/or close socket connection - serv_int_abort
 * expand protocols
     * more headers for different calculations and results
 * connect to sparc backend
 * what are the return codes for dispatch protocol
-* allow socket to stay open for multiple interactions
-* allow the buffer to store more that a static number of bytes
-    * probably requires a malloc
-    * probably requires that you pass the length of the object you are going to send beforehand
-    * need to correct parse_request to accept more bytes
 * evaluate inet ports vs unix ports (or is it sockets)
-* should client send header and length first? or should it just be pulled from an initialization string?
 * clean up print statements and use actual unit tests
 * it might be possible to remove the cnx_status fields if return codes are better used.
+* make code better suited for molecular dynamics calculations so you don't have to recompute everything every time. See https://medfordgroup.slack.com/archives/C02CMU78X1V/p1635278357002000 for the next 6 or 7 posts terminating in https://medfordgroup.slack.com/archives/C02CMU78X1V/p1635448942026400 
 * Sending floats is a pain in the butt. Is the best we can do converting the floats to strings,   joining the strings on the eor_sig, and then passing the whole thing to the other side to be string decoded?
     * TCP makes no guarantees (and in testing it was true) that the values would be sent one at a time
     * all the strings aren't the same length (e.g. 0.123 vs 2345.56753567), and it's not trivial to get padding correct. 

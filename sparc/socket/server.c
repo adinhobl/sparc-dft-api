@@ -429,20 +429,15 @@ int protocol_status(connectinfo_t *cnxinfo, calc_state_t *calc_state){
 }
 
 int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state){
-    char req_buf[TMP_BUF_SIZE];
     int bytes_rcvd = 0;
     char *new_init_str_ptr;
     
     // bead index
-    bytes_rcvd = serv_recv_msg(cnxinfo, req_buf, TMP_BUF_SIZE);
-    printf("bead bytes rcvd: %d\n", bytes_rcvd);
-    calc_state->bead_index = atoi(req_buf);
-    printf("Bead num: %d\n", calc_state->bead_index);
+    serv_recv_int(cnxinfo, &(calc_state->bead_index));
+    printf("Bead Index: %d\n", calc_state->bead_index);
 
     // initialization string length
-    bytes_rcvd = serv_recv_msg(cnxinfo, req_buf, TMP_BUF_SIZE);
-    printf("Bytes rcvd: %d\n", bytes_rcvd);
-    calc_state->init_string_len = atoi(req_buf); // only message len, not eor_sig
+    serv_recv_int(cnxinfo, &(calc_state->init_string_len));
     printf("Init_str_len: %d\n", calc_state->init_string_len);
 
     // initialization string
@@ -466,11 +461,6 @@ int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state){
             fprintf(stderr, "Full init string not receved.\n");
             return -1;
         }
-    } else if (calc_state->init_string != NULL && calc_state->init_string_len == 0){
-        // the newest request has no init string, but previous one did
-        // may not need this part?
-        free(calc_state->init_string);
-        calc_state->init_string = NULL;
     } else if (calc_state->init_string_len < 0){
         // not an actual positive string length
         cnxinfo->request_type = -1;
@@ -479,6 +469,8 @@ int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state){
         return -1;
     }
     //no init string, none previously
+
+    // could add more advanced init string parsing here, for MD simulations or options for SPARC codes
 
     return 0;
 }
@@ -552,6 +544,24 @@ int protocol_echo(connectinfo_t *cnxinfo){
     return 0;
 }
 
-/*****                                               *****
- *****  Insert Calls to DFT Library, as necessary    *****
- *****                                               *****/ 
+int protocol_getforce(connectinfo_t *cnxinfo, calc_state_t *calc_state){
+
+    // Insert Calls to DFT Library, as specified    
+
+    // Send "FORCEREADY"
+    // need to implement serv_send_arr and serv_send_int
+
+    // Send double calc_state->potential
+
+    // Send int32 calc_state->num_atoms
+
+    // Send 3 cartesian coords for each atom calc_state->atom_coords. 
+
+    // Send 9 doubles for virial calc_state->virial
+
+    // JSON string currently unimplemented.
+
+    return 0;
+}
+
+ 

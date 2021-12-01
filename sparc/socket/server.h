@@ -394,17 +394,12 @@ int protocol_init(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 int protocol_posdata(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 
 /* 
- *
+ * Currently unimplemented.
  */
 int protocol_getforce(connectinfo_t *cnxinfo, calc_state_t *calc_state);
 
-/* 
- *
- */
-int protocol_getstress(connectinfo_t *cnxinfo, calc_state_t *calc_state);
-
 /*
- * Echos the request data back to the client. 
+ * Echos the request data back to the client. Useful for troubleshooting.
  * 
  * Arguments:
  *  cnxinfo: information about the client-server connection so this
